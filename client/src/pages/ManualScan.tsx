@@ -3,40 +3,48 @@ import FindingCard from "@/components/FindingCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { ManualScan } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ManualScan() {
   const [isScanning, setIsScanning] = useState(false);
+  const { toast } = useToast();
+
+  const { data: scans = [] } = useQuery<ManualScan[]>({
+    queryKey: ["/api/manual-scans"],
+  });
+
+  const scanMutation = useMutation({
+    mutationFn: (url: string) => apiRequest("POST", "/api/analyze-listing", { url }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/manual-scans"] });
+      toast({ title: "Analysis complete!" });
+      setIsScanning(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Analysis failed", 
+        description: error.message,
+        variant: "destructive"
+      });
+      setIsScanning(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/manual-scans/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/manual-scans"] });
+      toast({ title: "Scan deleted" });
+    },
+  });
 
   const handleScan = (url: string) => {
-    console.log('Scanning URL:', url);
     setIsScanning(true);
-    // TODO: remove mock functionality
-    setTimeout(() => setIsScanning(false), 2000);
+    scanMutation.mutate(url);
   };
-
-  // TODO: remove mock functionality
-  const mockScanHistory = [
-    {
-      id: "1",
-      listingTitle: "Gold Chain Bracelet - Tested Piece",
-      listingUrl: "https://www.vinted.com/items/99999",
-      price: "€35.00",
-      confidenceScore: 95,
-      detectedMaterials: ["18K Gold"],
-      aiReasoning: "Clear 750 hallmark visible on clasp. Characteristic gold color and weight appearance. Professional jewelry craftsmanship with secure clasp mechanism.",
-      foundAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
-    },
-    {
-      id: "2",
-      listingTitle: "Costume Jewellery Set",
-      listingUrl: "https://www.vinted.com/items/88888",
-      price: "€5.00",
-      confidenceScore: 15,
-      detectedMaterials: [],
-      aiReasoning: "No hallmarks visible. Material appears to be base metal with plating. Lightweight construction typical of costume jewelry. No precious materials detected.",
-      foundAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
-    },
-  ];
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -66,11 +74,17 @@ export default function ManualScan() {
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Scan History</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          {mockScanHistory.map((scan) => (
+          {scans.map((scan) => (
             <FindingCard
               key={scan.id}
-              {...scan}
-              onDelete={() => console.log('Delete scan', scan.id)}
+              listingTitle={scan.listingTitle}
+              listingUrl={scan.listingUrl}
+              price={scan.price || "N/A"}
+              confidenceScore={scan.confidenceScore}
+              detectedMaterials={scan.detectedMaterials}
+              aiReasoning={scan.aiReasoning}
+              foundAt={scan.scannedAt}
+              onDelete={() => deleteMutation.mutate(scan.id)}
             />
           ))}
         </div>

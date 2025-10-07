@@ -1,40 +1,28 @@
 import FindingCard from "@/components/FindingCard";
 import { Gem } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Finding } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Findings() {
-  // TODO: remove mock functionality
-  const mockFindings = [
-    {
-      id: "1",
-      listingTitle: "Vintage Pearl Necklace - Mystery Bundle",
-      listingUrl: "https://www.vinted.com/items/12345",
-      price: "€15.00",
-      confidenceScore: 92,
-      detectedMaterials: ["14K Gold", "Real Pearl"],
-      aiReasoning: "Clear 585 hallmark visible on clasp in photo 2. Pearl shows natural luster and irregular surface texture consistent with genuine pearls. Professional craftsmanship evident in setting.",
-      foundAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
+  const { toast } = useToast();
+
+  const { data: findings = [], isLoading } = useQuery<Finding[]>({
+    queryKey: ["/api/findings"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/findings/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/findings"] });
+      toast({ title: "Finding deleted" });
     },
-    {
-      id: "2",
-      listingTitle: "Silver Bracelet Bundle Deal",
-      listingUrl: "https://www.vinted.com/items/67890",
-      price: "€8.50",
-      confidenceScore: 87,
-      detectedMaterials: ["925 Silver"],
-      aiReasoning: "Sterling 925 stamp clearly visible on clasp in photo 1. Characteristic silver tarnish patterns indicate genuine material. Well-preserved condition.",
-      foundAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
-    },
-    {
-      id: "3",
-      listingTitle: "Mixed Jewellery Lot - Various Pieces",
-      listingUrl: "https://www.vinted.com/items/11122",
-      price: "€22.00",
-      confidenceScore: 84,
-      detectedMaterials: ["18K Gold", "Diamond"],
-      aiReasoning: "750 hallmark detected on ring band. Small diamond shows clear faceting and proper setting. Ring appears to be vintage estate piece.",
-      foundAt: new Date(Date.now() - 16 * 60 * 60 * 1000),
-    },
-  ];
+  });
+
+  if (isLoading) {
+    return <div className="p-8">Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -45,13 +33,19 @@ export default function Findings() {
         </p>
       </div>
 
-      {mockFindings.length > 0 ? (
+      {findings.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {mockFindings.map((finding) => (
+          {findings.map((finding) => (
             <FindingCard
               key={finding.id}
-              {...finding}
-              onDelete={() => console.log('Delete finding', finding.id)}
+              listingTitle={finding.listingTitle}
+              listingUrl={finding.listingUrl}
+              price={finding.price}
+              confidenceScore={finding.confidenceScore}
+              detectedMaterials={finding.detectedMaterials}
+              aiReasoning={finding.aiReasoning}
+              foundAt={finding.foundAt}
+              onDelete={() => deleteMutation.mutate(finding.id)}
             />
           ))}
         </div>

@@ -4,56 +4,75 @@ import FindingCard from "@/components/FindingCard";
 import AddSearchDialog from "@/components/AddSearchDialog";
 import { Plus } from "lucide-react";
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { SearchQuery, Finding } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const { toast } = useToast();
 
-  // TODO: remove mock functionality
-  const mockSearches = [
-    {
-      id: "1",
-      searchLabel: "Mystery Jewellery Silver",
-      vintedUrl: "https://www.vinted.com/catalog?search_text=mystery+jewellery+silver",
-      scanFrequency: 3,
-      confidenceThreshold: 80,
-      isActive: true,
-      lastScannedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      status: "active" as const,
-    },
-    {
-      id: "2",
-      searchLabel: "Vintage Gold Jewellery",
-      vintedUrl: "https://www.vinted.com/catalog?search_text=vintage+gold+jewellery",
-      scanFrequency: 6,
-      confidenceThreshold: 85,
-      isActive: false,
-      lastScannedAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
-      status: "paused" as const,
-    },
-  ];
+  const { data: searches = [] } = useQuery<SearchQuery[]>({
+    queryKey: ["/api/searches"],
+  });
 
-  const mockFindings = [
-    {
-      id: "1",
-      listingTitle: "Vintage Pearl Necklace - Mystery Bundle",
-      listingUrl: "https://www.vinted.com/items/12345",
-      price: "€15.00",
-      confidenceScore: 92,
-      detectedMaterials: ["14K Gold", "Real Pearl"],
-      aiReasoning: "Clear 585 hallmark visible on clasp in photo 2. Pearl shows natural luster and irregular surface texture consistent with genuine pearls.",
-      foundAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
+  const { data: findings = [] } = useQuery<Finding[]>({
+    queryKey: ["/api/findings"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/searches/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/searches"] });
+      toast({ title: "Search deleted successfully" });
     },
-    {
-      id: "2",
-      listingTitle: "Silver Bracelet Bundle Deal",
-      listingUrl: "https://www.vinted.com/items/67890",
-      price: "€8.50",
-      confidenceScore: 87,
-      detectedMaterials: ["925 Silver"],
-      aiReasoning: "Sterling 925 stamp clearly visible on clasp. Characteristic silver tarnish patterns indicate genuine material.",
-      foundAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<SearchQuery> }) =>
+      apiRequest("PUT", `/api/searches/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/searches"] });
     },
-  ];
+  });
+
+  const triggerMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/searches/${id}/trigger`),
+    onSuccess: () => {
+      toast({ title: "Scan started", description: "Check findings in a few moments" });
+    },
+  });
+
+  const deleteFindingMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/findings/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/findings"] });
+      toast({ title: "Finding deleted" });
+    },
+  });
+
+  const createSearchMutation = useMutation({
+    mutationFn: (data: { url: string; frequency: number; threshold: number }) => {
+      const label = new URL(data.url).searchParams.get("search_text") || "Custom Search";
+      return apiRequest("POST", "/api/searches", {
+        vintedUrl: data.url,
+        searchLabel: label,
+        scanFrequencyHours: data.frequency,
+        confidenceThreshold: data.threshold,
+        isActive: true,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/searches"] });
+      toast({ title: "Search query added successfully" });
+    },
+  });
+
+  const getStatus = (search: SearchQuery): "active" | "paused" | "scanning" => {
+    if (!search.isActive) return "paused";
+    return "active";
+  };
 
   return (
     <div className="space-y-8">
@@ -82,14 +101,23 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-4">
-            {mockSearches.map((search) => (
+            {searches.slice(0, 2).map((search) => (
               <SearchQueryCard
                 key={search.id}
-                {...search}
-                onToggle={() => console.log('Toggle', search.id)}
-                onEdit={() => console.log('Edit', search.id)}
-                onDelete={() => console.log('Delete', search.id)}
-                onTrigger={() => console.log('Trigger', search.id)}
+                searchLabel={search.searchLabel}
+                vintedUrl={search.vintedUrl}
+                scanFrequency={search.scanFrequencyHours}
+                confidenceThreshold={search.confidenceThreshold}
+                isActive={search.isActive}
+                lastScannedAt={search.lastScannedAt}
+                status={getStatus(search)}
+                onToggle={() => updateMutation.mutate({ 
+                  id: search.id, 
+                  data: { isActive: !search.isActive } 
+                })}
+                onEdit={() => {}}
+                onDelete={() => deleteMutation.mutate(search.id)}
+                onTrigger={() => triggerMutation.mutate(search.id)}
               />
             ))}
           </div>
@@ -98,11 +126,17 @@ export default function Dashboard() {
         <div className="space-y-4">
           <h2 className="text-xl font-semibold">Recent Findings</h2>
           <div className="space-y-4">
-            {mockFindings.map((finding) => (
+            {findings.slice(0, 2).map((finding) => (
               <FindingCard
                 key={finding.id}
-                {...finding}
-                onDelete={() => console.log('Delete finding', finding.id)}
+                listingTitle={finding.listingTitle}
+                listingUrl={finding.listingUrl}
+                price={finding.price}
+                confidenceScore={finding.confidenceScore}
+                detectedMaterials={finding.detectedMaterials}
+                aiReasoning={finding.aiReasoning}
+                foundAt={finding.foundAt}
+                onDelete={() => deleteFindingMutation.mutate(finding.id)}
               />
             ))}
           </div>
@@ -112,7 +146,7 @@ export default function Dashboard() {
       <AddSearchDialog
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
-        onSubmit={(data) => console.log('New search:', data)}
+        onSubmit={(data) => createSearchMutation.mutate(data)}
       />
     </div>
   );

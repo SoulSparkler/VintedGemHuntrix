@@ -1,0 +1,314 @@
+# Vinted Hidden Gems Finder - Complete Project Specification
+
+## Project Overview
+Build an AI-powered web application that automatically scans Vinted listings to identify genuine jewelry (gold, silver, pearls, precious stones) that sellers may not realize they're selling. The tool monitors specified searches and sends instant Telegram alerts when valuable items are found.
+
+---
+
+## Core Features
+
+### 1. Automated Search Monitoring
+- Users provide Vinted search URLs (e.g., "mystery jewellery silver" with price filters)
+- System automatically scrapes these searches every 3 hours (default, configurable per search)
+- Tracks which listings have been analyzed to avoid duplicates
+- Only analyzes NEW listings that appear in searches
+
+### 2. AI Vision Analysis
+- Uses GPT-4o-mini (or Claude 3.5 Haiku) to analyze jewelry photos
+- Detects:
+  - **Gold**: All karats (10K-24K) and hallmarks (417, 585, 750, 916, 999)
+  - **Silver**: Sterling 925, 900, 800
+  - **Platinum**: 950, 900
+  - **Real Pearls**: Distinguish from fake/plastic
+  - **Precious Stones**: Diamonds, rubies, sapphires, emeralds
+- Looks for both hallmarks/stamps AND visual characteristics (color, texture, wear patterns)
+- Returns confidence score 0-100%
+- Only alerts on items with 80%+ confidence
+
+### 3. Instant Telegram Notifications
+- Sends alert immediately when valuable item found (80%+ confidence)
+- Alert includes:
+  - Item title
+  - Direct link to Vinted listing
+  - AI reasoning (e.g., "Detected 925 stamp on bracelet in photo 3, genuine pearl luster")
+  - Confidence score
+  - Price
+
+### 4. Manual Single-Listing Analysis
+- User can paste any Vinted listing URL for instant analysis
+- Returns immediate results with confidence score and reasoning
+- Stores in separate history (different from automated scans)
+
+### 5. Web Dashboard
+- **Add/Edit/Delete Search Queries** via web interface
+  - Input: Vinted search URL
+  - Configure scan frequency per search (1hr, 3hr, 6hr, 12hr, 24hr)
+  - Set confidence threshold per search (default 80%)
+  - Enable/disable individual searches
+- **Active Queries View**: List all monitored searches with status
+- **Findings History**: Shows all 80%+ items found (auto-deleted after 15 days)
+- **Manual Scan Section**: Paste listing URL for instant analysis with separate history
+- Clean, minimal UI - focus on functionality over aesthetics
+
+---
+
+## Technical Architecture
+
+### Tech Stack
+- **Frontend**: React (hosted on Netlify free tier)
+- **Backend**: Python FastAPI (hosted on Render.com or Railway.app free tier)
+- **Database**: Supabase (free tier - PostgreSQL)
+- **AI Vision**: GPT-4o-mini with vision API (~$0.00015 per image)
+- **Notifications**: Telegram Bot API
+- **Scheduling**: APScheduler or similar for periodic scans
+
+### Database Schema
+
+#### Table: `search_queries`
+```sql
+id (uuid, primary key)
+vinted_url (text)
+search_label (text) - user-friendly name extracted from URL
+scan_frequency_hours (integer, default 3)
+confidence_threshold (integer, default 80)
+is_active (boolean, default true)
+last_scanned_at (timestamp)
+created_at (timestamp)
+```
+
+#### Table: `analyzed_listings`
+```sql
+id (uuid, primary key)
+listing_id (text, unique) - extracted from Vinted URL
+search_query_id (uuid, foreign key)
+analyzed_at (timestamp)
+confidence_score (integer)
+is_valuable (boolean) - true if >= threshold
+```
+
+#### Table: `findings`
+```sql
+id (uuid, primary key)
+listing_id (text)
+listing_url (text)
+listing_title (text)
+price (decimal)
+confidence_score (integer)
+ai_reasoning (text)
+detected_materials (jsonb) - array of detected items
+search_query_id (uuid, foreign key)
+found_at (timestamp)
+telegram_sent (boolean)
+expires_at (timestamp) - found_at + 15 days
+```
+
+#### Table: `manual_scans`
+```sql
+id (uuid, primary key)
+listing_url (text)
+listing_title (text)
+confidence_score (integer)
+ai_reasoning (text)
+detected_materials (jsonb)
+scanned_at (timestamp)
+```
+
+### Backend API Endpoints
+
+#### Search Query Management
+- `POST /api/searches` - Add new search query
+- `GET /api/searches` - List all search queries
+- `PUT /api/searches/{id}` - Update search query
+- `DELETE /api/searches/{id}` - Delete search query
+- `POST /api/searches/{id}/trigger` - Manually trigger scan now
+
+#### Manual Analysis
+- `POST /api/analyze-listing` - Analyze single listing URL immediately
+
+#### Findings
+- `GET /api/findings` - List all findings (with pagination)
+- `DELETE /api/findings/{id}` - Delete specific finding
+
+#### System
+- `GET /api/health` - Health check
+- `GET /api/stats` - Basic stats (optional for future)
+
+### Vinted Scraping Strategy
+
+**Anti-Ban Measures:**
+- Rotate user agents (simulate different browsers)
+- Random delays between requests (2-5 seconds)
+- Respect rate limits (not too aggressive)
+- Use requests library with proper headers
+- No account needed - scrape public search results
+
+**Scraping Process:**
+1. Fetch Vinted search URL HTML
+2. Parse listing cards from search results
+3. Extract: listing_id, title, price, image URLs, listing URL
+4. Check if listing_id already in `analyzed_listings` table
+5. If new: download images and send to AI vision API
+6. Store results and send Telegram alert if 80%+
+
+**Note**: Vinted loads content dynamically, may need Selenium/Playwright or analyze their API network calls for JSON responses.
+
+### AI Vision Prompt Template
+
+```
+Analyze this jewelry image and determine if it contains genuine valuable materials.
+
+Look for:
+1. HALLMARKS/STAMPS: 
+   - Gold: 10K, 14K, 18K, 22K, 24K, 417, 585, 750, 916, 999
+   - Silver: 925, Sterling, 900, 800
+   - Platinum: 950, 900, PT, PLAT
+
+2. VISUAL CHARACTERISTICS:
+   - Gold: Rich yellow/rose color, weight appearance, wear patterns
+   - Silver: Bright metallic luster, tarnish patterns
+   - Pearls: Natural luster, irregular shape, surface texture
+   - Precious stones: Clarity, cut quality, color depth
+
+3. CONTEXT CLUES:
+   - Professional craftsmanship
+   - Quality settings
+   - Age indicators
+
+Provide:
+- Confidence score (0-100%)
+- List of detected valuable materials
+- Specific reasoning with photo references
+- Whether this appears to be a "hidden gem" the seller may not recognize
+
+Format response as JSON:
+{
+  "confidence_score": 85,
+  "is_valuable": true,
+  "detected_materials": ["14K Gold", "Real Pearl"],
+  "reasoning": "Clear 585 hallmark visible on clasp in photo 2. Pearl shows natural luster and irregular surface texture consistent with genuine pearls.",
+  "specific_findings": [
+    {"item": "14K Gold clasp", "evidence": "585 stamp visible in photo 2"},
+    {"item": "Natural pearl", "evidence": "Irregular surface, orient luster in photo 1"}
+  ]
+}
+```
+
+---
+
+## Implementation Priority
+
+### Phase 1: Core Backend (START HERE)
+1. Vinted scraper (parse search results, extract listings)
+2. AI vision integration (OpenAI API)
+3. Database setup (Supabase schema)
+4. Telegram bot integration
+5. Scheduler for automated scans
+6. REST API endpoints
+
+### Phase 2: Frontend Dashboard
+1. Search query management interface
+2. Active queries list
+3. Findings display
+4. Manual scan interface
+
+### Phase 3: Deployment
+1. Deploy backend to Render/Railway
+2. Deploy frontend to Netlify
+3. Set up environment variables securely
+4. Configure scheduled tasks
+
+---
+
+## Environment Variables Needed
+
+```
+OPENAI_API_KEY=sk-...
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+SUPABASE_URL=https://...
+SUPABASE_KEY=...
+DATABASE_URL=postgresql://...
+```
+
+---
+
+## Cost Estimation
+
+**Monthly Costs (estimated):**
+- Hosting: FREE (Netlify + Render/Railway free tiers)
+- Database: FREE (Supabase free tier)
+- AI Vision: 
+  - 100 listings/day = ~$0.45/month
+  - 500 listings/day = ~$2.25/month
+  - 1000 listings/day = ~$4.50/month
+
+**Total: ~$0-5/month depending on usage**
+
+---
+
+## Key Considerations
+
+### Language Handling
+- Vinted automatically translates search terms across European markets
+- No need for country-specific filtering
+- System works across Netherlands, Belgium, France, Germany, Spain, Ireland, Italy
+
+### Data Retention
+- Findings auto-delete after 15 days (reduce storage)
+- Keep analyzed_listings indefinitely to avoid re-scanning
+- Manual scans history kept separately
+
+### Scalability
+- Start with 3-hour scan frequency
+- Can adjust per search query
+- Monitor API costs and adjust if needed
+
+### Future Enhancements (Not MVP)
+- Training custom model on user feedback
+- Storing images for model training
+- Advanced statistics dashboard
+- Multiple user support
+- Mobile app
+
+---
+
+## Success Criteria
+
+The app is successful when:
+1. User can add Vinted search URLs via web interface
+2. System automatically scans every 3 hours
+3. AI accurately detects valuable jewelry (80%+ confidence)
+4. Telegram alerts arrive instantly with reasoning
+5. User can manually scan any listing URL
+6. No duplicate scans of same listing
+7. Findings auto-delete after 15 days
+8. System runs reliably on free tier infrastructure
+
+---
+
+## Security Notes
+
+- Never commit API keys to Git
+- Use environment variables for all secrets
+- Implement rate limiting on API endpoints
+- Validate all user inputs (URLs, etc.)
+- Sanitize Vinted scraping to avoid IP bans
+
+---
+
+## Getting Started Command
+
+```bash
+# Backend setup
+python -m venv venv
+source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+pip install fastapi uvicorn supabase openai requests beautifulsoup4 apscheduler python-telegram-bot python-dotenv
+
+# Create .env file with your credentials
+# Run backend
+uvicorn main:app --reload
+```
+
+---
+
+This specification contains everything needed to build the Vinted Hidden Gems Finder. Start with Phase 1 (backend), test thoroughly, then proceed to Phase 2 (frontend).

@@ -9,7 +9,8 @@ import type { SearchQuery } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
 export default function SearchQueries() {
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingSearch, setEditingSearch] = useState<SearchQuery | null>(null);
   const { toast } = useToast();
 
   const { data: searches = [], isLoading } = useQuery<SearchQuery[]>({
@@ -29,6 +30,7 @@ export default function SearchQueries() {
       apiRequest("PUT", `/api/searches/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/searches"] });
+      toast({ title: "Search updated successfully" });
     },
   });
 
@@ -56,6 +58,34 @@ export default function SearchQueries() {
     },
   });
 
+  const handleOpenAddDialog = () => {
+    setEditingSearch(null);
+    setDialogOpen(true);
+  };
+
+  const handleOpenEditDialog = (search: SearchQuery) => {
+    setEditingSearch(search);
+    setDialogOpen(true);
+  };
+
+  const handleDialogSubmit = (data: { url: string; frequency: number; threshold: number }) => {
+    const label = new URL(data.url).searchParams.get("search_text") || "Custom Search";
+
+    if (editingSearch) {
+      updateMutation.mutate({
+        id: editingSearch.id,
+        data: {
+          vintedUrl: data.url,
+          searchLabel: label,
+          scanFrequencyHours: data.frequency,
+          confidenceThreshold: data.threshold,
+        },
+      });
+    } else {
+      createSearchMutation.mutate(data);
+    }
+  };
+
   const getStatus = (search: SearchQuery): "active" | "paused" | "scanning" => {
     if (!search.isActive) return "paused";
     return "active";
@@ -75,7 +105,7 @@ export default function SearchQueries() {
           </p>
         </div>
         <Button
-          onClick={() => setAddDialogOpen(true)}
+          onClick={handleOpenAddDialog}
           className="gap-2"
           data-testid="button-add-search"
         >
@@ -100,7 +130,7 @@ export default function SearchQueries() {
                 id: search.id, 
                 data: { isActive: !search.isActive } 
               })}
-              onEdit={() => {}}
+              onEdit={() => handleOpenEditDialog(search)}
               onDelete={() => deleteMutation.mutate(search.id)}
               onTrigger={() => triggerMutation.mutate(search.id)}
             />
@@ -115,7 +145,7 @@ export default function SearchQueries() {
           <p className="text-sm text-muted-foreground mb-4 max-w-md">
             Add your first Vinted search URL to start monitoring for valuable jewelry listings
           </p>
-          <Button onClick={() => setAddDialogOpen(true)} className="gap-2">
+          <Button onClick={handleOpenAddDialog} className="gap-2">
             <Plus className="w-4 h-4" />
             Add Your First Search
           </Button>
@@ -123,9 +153,14 @@ export default function SearchQueries() {
       )}
 
       <AddSearchDialog
-        open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
-        onSubmit={(data) => createSearchMutation.mutate(data)}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSubmit={handleDialogSubmit}
+        editData={editingSearch ? {
+          url: editingSearch.vintedUrl,
+          frequency: editingSearch.scanFrequencyHours,
+          threshold: editingSearch.confidenceThreshold
+        } : null}
       />
     </div>
   );

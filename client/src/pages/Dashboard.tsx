@@ -10,7 +10,8 @@ import type { SearchQuery, Finding } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingSearch, setEditingSearch] = useState<SearchQuery | null>(null);
   const { toast } = useToast();
 
   const { data: searches = [] } = useQuery<SearchQuery[]>({
@@ -34,6 +35,7 @@ export default function Dashboard() {
       apiRequest("PUT", `/api/searches/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/searches"] });
+      toast({ title: "Search updated successfully" });
     },
   });
 
@@ -69,6 +71,34 @@ export default function Dashboard() {
     },
   });
 
+  const handleOpenAddDialog = () => {
+    setEditingSearch(null);
+    setDialogOpen(true);
+  };
+
+  const handleOpenEditDialog = (search: SearchQuery) => {
+    setEditingSearch(search);
+    setDialogOpen(true);
+  };
+
+  const handleDialogSubmit = (data: { url: string; frequency: number; threshold: number }) => {
+    const label = new URL(data.url).searchParams.get("search_text") || "Custom Search";
+
+    if (editingSearch) {
+      updateMutation.mutate({
+        id: editingSearch.id,
+        data: {
+          vintedUrl: data.url,
+          searchLabel: label,
+          scanFrequencyHours: data.frequency,
+          confidenceThreshold: data.threshold,
+        },
+      });
+    } else {
+      createSearchMutation.mutate(data);
+    }
+  };
+
   const getStatus = (search: SearchQuery): "active" | "paused" | "scanning" => {
     if (!search.isActive) return "paused";
     return "active";
@@ -90,7 +120,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Active Searches</h2>
             <Button
-              onClick={() => setAddDialogOpen(true)}
+              onClick={handleOpenAddDialog}
               size="sm"
               className="gap-2"
               data-testid="button-add-search"
@@ -115,7 +145,7 @@ export default function Dashboard() {
                   id: search.id, 
                   data: { isActive: !search.isActive } 
                 })}
-                onEdit={() => {}}
+                onEdit={() => handleOpenEditDialog(search)}
                 onDelete={() => deleteMutation.mutate(search.id)}
                 onTrigger={() => triggerMutation.mutate(search.id)}
               />
@@ -144,9 +174,14 @@ export default function Dashboard() {
       </div>
 
       <AddSearchDialog
-        open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
-        onSubmit={(data) => createSearchMutation.mutate(data)}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSubmit={handleDialogSubmit}
+        editData={editingSearch ? {
+          url: editingSearch.vintedUrl,
+          frequency: editingSearch.scanFrequencyHours,
+          threshold: editingSearch.confidenceThreshold
+        } : null}
       />
     </div>
   );

@@ -1,8 +1,17 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openai: OpenAI | null = null;
+
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+  console.log("OpenAI client initialized successfully.");
+} else {
+  console.warn(
+    "OPENAI_API_KEY is not set. Image analysis will be disabled."
+  );
+}
 
 interface AnalysisResult {
   confidenceScore: number;
@@ -56,6 +65,16 @@ export async function analyzeJewelryImages(
   imageUrls: string[],
   listingTitle: string
 ): Promise<AnalysisResult> {
+  if (!openai) {
+    return {
+      confidenceScore: 0,
+      isValuable: false,
+      detectedMaterials: [],
+      reasoning: "Image analysis is disabled because OPENAI_API_KEY is not configured.",
+      specificFindings: [],
+    };
+  }
+
   console.log(`Analyzing ${imageUrls.length} images with OpenAI Vision`);
 
   if (imageUrls.length === 0) {

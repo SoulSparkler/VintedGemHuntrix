@@ -17,10 +17,12 @@ export default defineConfig(async () => ({
   ],
   resolve: {
     alias: {
-      // Dit pad is nu correct. Het verwijst direct naar de 'src' map.
-      "@": path.resolve(import.meta.dirname, "./src"),
-      "@shared": path.resolve(import.meta.dirname, "./shared"),
-      "@assets": path.resolve(import.meta.dirname, "./attached_assets"),
+      // Dit pad is nu correct, omdat het bestand zich in de /client map bevindt
+      "@": path.resolve(__dirname, "./src"),
+      // De volgende paden zijn aangepast om terug te gaan naar de root map en dan naar de juiste map te gaan.
+      // Pas deze aan als de mappen zich ergens anders bevinden.
+      "@shared": path.resolve(__dirname, "../shared"),
+      "@assets": path.resolve(__dirname, "../attached_assets"),
     },
   },
   root: ".",

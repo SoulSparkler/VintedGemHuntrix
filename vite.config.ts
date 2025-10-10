@@ -17,7 +17,8 @@ export default defineConfig(async () => ({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "./client/src"),
+      // Dit pad is nu correct. Het verwijst direct naar de 'src' map.
+      "@": path.resolve(import.meta.dirname, "./src"),
       "@shared": path.resolve(import.meta.dirname, "./shared"),
       "@assets": path.resolve(import.meta.dirname, "./attached_assets"),
     },
@@ -34,4 +35,3 @@ export default defineConfig(async () => ({
     },
   },
 }));
-

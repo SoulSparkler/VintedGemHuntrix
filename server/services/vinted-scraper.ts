@@ -50,7 +50,7 @@ export async function scrapeVintedSearch(searchUrl: string): Promise<VintedListi
       const scriptContent = $(script).html();
       if (scriptContent && scriptContent.includes('catalog_items')) {
         try {
-          const jsonMatch = scriptContent.match(/"catalog_items"\s*:\s*(\[.*?\])/s);
+          const jsonMatch = scriptContent.match(/"catalog_items"\s*:\s*(\[[\s\S]*?\])/);
           if (jsonMatch) {
             const items = JSON.parse(jsonMatch[1]);
             for (const item of items) {
@@ -110,7 +110,7 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
       const scriptContent = $(script).html();
       if (scriptContent && scriptContent.includes('"item"')) {
         try {
-          const jsonMatch = scriptContent.match(/"item"\s*:\s*(\{.*?\})/s);
+          const jsonMatch = scriptContent.match(/"item"\s*:\s*(\{[\s\S]*?\})/);
           if (jsonMatch) {
             const item = JSON.parse(jsonMatch[1]);
             return {

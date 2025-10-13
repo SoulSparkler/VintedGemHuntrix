@@ -37,4 +37,34 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     // Combineer key tot URL, en voeg API_BASE_URL toe
-    const path = queryKey.j
+    const path = queryKey.join("/");
+    const fullUrl = path.startsWith("http")
+      ? path
+      : `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+
+    const res = await fetch(fullUrl, {
+      credentials: "include",
+    });
+
+    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+      return null;
+    }
+
+    await throwIfResNotOk(res);
+    return await res.json();
+  };
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: getQueryFn({ on401: "throw" }),
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: Infinity,
+      retry: false,
+    },
+    mutations: {
+      retry: false,
+    },
+  },
+});

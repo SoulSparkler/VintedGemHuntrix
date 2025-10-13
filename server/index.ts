@@ -7,22 +7,19 @@ import { startScheduler } from "./scheduler";
 const app = express();
 
 const allowedOrigins = [
-  "https://huntrix.netlify.app",
-  "http://localhost:5173",
+  "https://huntrix.netlify.app", // jouw Netlify site
+  "http://localhost:5173",       // voor lokaal testen
 ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // voor server-to-server calls
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    console.error("❌ Blocked by CORS:", origin);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

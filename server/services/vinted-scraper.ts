@@ -84,75 +84,90 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
   console.log(`Scraping single Vinted listing: ${listingUrl}`);
   
   try {
-    await delay(2000 + Math.random() * 3000);
-    
-    const res = await fetch(listingUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml",
-      },
-    });
+    await delay(1500 + Math.random() * 2000);
 
-    if (!res.ok) throw new Error(`Failed to fetch page: ${res.status}`);
-    const html = await res.text();
+    const headers = {
+      "User-Agent": getRandomUserAgent(),
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+    };
 
+    const { data: html } = await axios.get(listingUrl, { headers, timeout: 15000 });
     const $ = cheerio.load(html);
-    const listingIdMatch = listingUrl.match(/\/items\/(\d+)/);
     
+    const listingIdMatch = listingUrl.match(/\/items\/(\d+)/);
     if (!listingIdMatch) {
       console.error('Could not extract listing ID from URL');
       return null;
     }
+    const listingId = listingIdMatch[1];
 
-    let images: string[] = [];
+    let imageUrls: string[] = [];
 
-    // 1. Probeer standaard <img> tags
-    const imgMatches = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)];
-    if (imgMatches.length > 0) {
-      images = imgMatches.map(m => m[1]);
-    }
+    // --- Primary extraction: Cheerio ---
+    $("img").each((i, el) => {
+      const src = $(el).attr("src") || $(el).attr("data-src");
+      if (src && src.includes("vinted.net")) imageUrls.push(src);
+    });
+    imageUrls = [...new Set(imageUrls)]; // Remove duplicates
 
-    // 2. Fallback: probeer JSON blob met "photo":"url"
-    if (images.length === 0) {
-      const jsonMatches = [...html.matchAll(/"url":"(https:[^"]+)"/g)];
-      images = jsonMatches.map(m => m[1].replace(/\\u002F/g, "/"));
-    }
-
-    console.log(`Found ${images.length} image(s):`, images.slice(0, 3));
-
-    const scriptTags = $('script').toArray();
-    for (const script of scriptTags) {
-      const scriptContent = $(script).html();
-      if (scriptContent && scriptContent.includes('"item"')) {
+    // --- Fallback 1: Extract from embedded JSON in HTML ---
+    if (imageUrls.length === 0) {
+      const jsonMatch = html.match(/window\.__INITIAL_DATA__\s*=\s*(\{.*?\});/s);
+      if (jsonMatch) {
         try {
-          const jsonMatch = scriptContent.match(/"item"\s*:\s*(\{[\s\S]*?\})/);
-          if (jsonMatch) {
-            const item = JSON.parse(jsonMatch[1]);
-            return {
-              listingId: listingIdMatch[1],
-              title: item.title || 'Untitled',
-              price: item.price ? `€${item.price}` : 'Price not available',
-              imageUrls: images,
-              listingUrl,
-            };
+          const jsonData = JSON.parse(jsonMatch[1]);
+          // A bit risky, but effective: stringify and regex out all possible image URLs
+          const photoCandidates = JSON.stringify(jsonData).match(
+            /(https:\/\/[^\s"']+\/vinted\.net[^\s"']+)/g
+          );
+          if (photoCandidates?.length) {
+            imageUrls = [...new Set(photoCandidates)];
+            console.log(`✅ Extracted ${imageUrls.length} images from embedded JSON`);
           }
-        } catch (e) {
-          console.error('Error parsing JSON from script tag:', e);
+        } catch (err: any) {
+          console.warn("⚠️ JSON parsing failed in fallback 1:", err.message);
         }
       }
     }
 
+    // --- Fallback 2: Try ?format=json endpoint ---
+    if (imageUrls.length === 0) {
+      try {
+        const jsonUrl = listingUrl + (listingUrl.includes("?") ? "&" : "?") + "format=json";
+        const { data: jsonData } = await axios.get(jsonUrl, { headers, timeout: 10000 });
+        const jsonString = JSON.stringify(jsonData);
+        const photoCandidates = jsonString.match(
+          /(https:\/\/[^\s"']+\/vinted\.net[^\s"']+)/g
+        );
+        if (photoCandidates?.length) {
+          imageUrls = [...new Set(photoCandidates)];
+          console.log(`✅ Extracted ${imageUrls.length} images from JSON endpoint`);
+        }
+      } catch (err: any) {
+        console.warn("⚠️ JSON fallback request failed:", err.message);
+      }
+    }
+
+    if (imageUrls.length === 0) {
+      console.warn(`⚠️ No images found for ${listingUrl}`);
+    } else {
+      console.log(`🖼️ Found ${imageUrls.length} image(s) for ${listingUrl}`);
+    }
+
+    // Extract other details
+    const title = $('h1').first().text().trim() || 'Untitled';
+    const price = $('.price-box__price').first().text().trim() || 'Price not available';
+
     return {
-      listingId: listingIdMatch[1],
-      title: $('h1').first().text().trim() || 'Untitled',
-      price: $('.price').first().text().trim() || 'Price not available',
-      imageUrls: images,
+      listingId,
+      title,
+      price,
+      imageUrls,
       listingUrl,
     };
   } catch (error: any) {
-    console.error('Error scraping Vinted listing:', error.message);
+    console.error(`❌ Error scraping ${listingUrl}:`, error.message);
     return null;
   }
 }

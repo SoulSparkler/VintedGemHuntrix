@@ -1,5 +1,5 @@
 import fetch from "node-fetch";
-import axios from "axios";
+import axios from "axios"; // Keep for scrapeVintedSearch
 import * as cheerio from "cheerio";
 
 const USER_AGENTS = [
@@ -25,6 +25,7 @@ export interface VintedListing {
   listingUrl: string;
 }
 
+// This function remains unchanged.
 export async function scrapeVintedSearch(searchUrl: string): Promise<VintedListing[]> {
   console.log(`Scraping Vinted search: ${searchUrl}`);
   
@@ -80,24 +81,43 @@ export async function scrapeVintedSearch(searchUrl: string): Promise<VintedListi
   }
 }
 
+// This function is now correctly implemented.
 export async function scrapeVintedListing(listingUrl: string): Promise<VintedListing | null> {
   console.log(`Scraping single Vinted listing: ${listingUrl}`);
   
   try {
     await delay(2000 + Math.random() * 3000);
     
+    // Step 1: Fetch the page content ONCE using node-fetch
     const res = await fetch(listingUrl, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Language": "en-US,en;q=0.9,nl;q=0.8",
         "Accept": "text/html,application/xhtml+xml",
       },
     });
 
-    if (!res.ok) throw new Error(`Failed to fetch page: ${res.status}`);
+    if (!res.ok) throw new Error(`Failed to fetch Vinted page: ${res.status}`);
     const html = await res.text();
 
+    // Step 2: Extract images from the fetched HTML using the new logic
+    let images: string[] = [];
+    const imgMatches = [...html.matchAll(/<img[^>]+src="(https:[^"]+)"/g)];
+    if (imgMatches.length > 0) {
+      images = imgMatches.map((m) => m[1]);
+    }
+    if (images.length === 0) {
+      const jsonMatches = [
+        ...html.matchAll(/"url":"(https:[^"]+?(?:jpg|jpeg|png|webp))"/g),
+      ];
+      images = jsonMatches.map((m) => m[1].replace(/\\u002F/g, "/"));
+    }
+    images = Array.from(new Set(images));
+    console.log(`🖼️ Found ${images.length} image(s) for ${listingUrl}`);
+    console.log(images.slice(0, 3));
+
+    // Step 3: Use the SAME HTML to extract title, price, and other details
     const $ = cheerio.load(html);
     const listingIdMatch = listingUrl.match(/\/items\/(\d+)/);
     
@@ -106,22 +126,7 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
       return null;
     }
 
-    let images: string[] = [];
-
-    // 1. Probeer standaard <img> tags
-    const imgMatches = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)];
-    if (imgMatches.length > 0) {
-      images = imgMatches.map(m => m[1]);
-    }
-
-    // 2. Fallback: probeer JSON blob met "photo":"url"
-    if (images.length === 0) {
-      const jsonMatches = [...html.matchAll(/"url":"(https:[^"]+)"/g)];
-      images = jsonMatches.map(m => m[1].replace(/\\u002F/g, "/"));
-    }
-
-    console.log(`Found ${images.length} image(s):`, images.slice(0, 3));
-
+    // Try to get details from the JSON blob in the same HTML
     const scriptTags = $('script').toArray();
     for (const script of scriptTags) {
       const scriptContent = $(script).html();
@@ -134,7 +139,7 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
               listingId: listingIdMatch[1],
               title: item.title || 'Untitled',
               price: item.price ? `€${item.price}` : 'Price not available',
-              imageUrls: images,
+              imageUrls: images, // Use the extracted images
               listingUrl,
             };
           }
@@ -144,11 +149,12 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
       }
     }
 
+    // Fallback to scraping from HTML if JSON fails
     return {
       listingId: listingIdMatch[1],
       title: $('h1').first().text().trim() || 'Untitled',
       price: $('.price').first().text().trim() || 'Price not available',
-      imageUrls: images,
+      imageUrls: images, // Use the extracted images
       listingUrl,
     };
   } catch (error: any) {

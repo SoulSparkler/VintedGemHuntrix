@@ -11,6 +11,7 @@ async function runScheduledScans() {
   }
 
   isRunning = true;
+  console.log("🧠 Start scan - memory usage:", Math.round(process.memoryUsage().heapUsed / 1024 / 1024), "MB");
   console.log("\n🔍 Running scheduled scans...");
 
   try {
@@ -27,9 +28,9 @@ async function runScheduledScans() {
         console.log(`Scanning: ${search.searchLabel}`);
         await scanSearchQuery(search);
 
-        console.log("Memory usage (MB):", Math.round(process.memoryUsage().heapUsed / 1024 / 1024));
-        await new Promise((res) => setTimeout(res, 3000));
+        console.log(`✅ Finished ${search.searchLabel}, memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB`);
         if (global.gc) global.gc();
+        await new Promise(res => setTimeout(res, 2000));
       } else {
         console.log(`Skipping ${search.searchLabel} - scanned ${Math.floor(hoursSinceLastScan)}h ago`);
       }

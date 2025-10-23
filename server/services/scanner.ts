@@ -8,9 +8,7 @@ export async function scanSearchQuery(searchQuery: SearchQuery): Promise<number>
   console.log(`\n=== Starting scan for: ${searchQuery.searchLabel} ===`);
   
   try {
-    const listings = await scrapeVintedSearch(searchQuery.vintedUrl);
-    console.log("Fetched", listings?.length || 0, "items");
-    if (global.gc) global.gc();
+    const listings = (await scrapeVintedSearch(searchQuery.vintedUrl)).slice(0, 10);
     let newFindings = 0;
 
     for (const listing of listings) {
@@ -69,6 +67,7 @@ export async function scanSearchQuery(searchQuery: SearchQuery): Promise<number>
       }
 
       await new Promise(resolve => setTimeout(resolve, 3000));
+      if (global.gc) global.gc(); // 🔧 forceer memory cleanup
     }
 
     await storage.updateLastScanned(searchQuery.id);

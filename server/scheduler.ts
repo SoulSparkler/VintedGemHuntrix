@@ -6,7 +6,7 @@ let isRunning = false;
 
 async function runScheduledScans() {
   if (isRunning) {
-    console.log("Scan already in progress, skipping");
+    console.log("⏸ Scan already running, skipping new cycle.");
     return;
   }
 
@@ -15,7 +15,7 @@ async function runScheduledScans() {
 
   try {
     const searches = await storage.getSearchQueries();
-    const activeSearches = searches.filter(s => s.isActive);
+    const activeSearches = searches.filter((s) => s.isActive);
 
     for (const search of activeSearches) {
       const now = new Date();
@@ -26,6 +26,10 @@ async function runScheduledScans() {
       if (hoursSinceLastScan >= search.scanFrequencyHours) {
         console.log(`Scanning: ${search.searchLabel}`);
         await scanSearchQuery(search);
+
+        console.log("Memory usage (MB):", Math.round(process.memoryUsage().heapUsed / 1024 / 1024));
+        await new Promise((res) => setTimeout(res, 3000));
+        if (global.gc) global.gc();
       } else {
         console.log(`Skipping ${search.searchLabel} - scanned ${Math.floor(hoursSinceLastScan)}h ago`);
       }
@@ -42,7 +46,7 @@ async function runScheduledScans() {
 
 export function startScheduler() {
   cron.schedule("0 * * * *", () => {
-    runScheduledScans().catch(err => {
+    runScheduledScans().catch((err) => {
       console.error("Scheduler error:", err);
     });
   });

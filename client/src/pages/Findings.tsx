@@ -1,4 +1,4 @@
-import FindingCard from "@/components/FindingCard";
+import { ScanResultCard } from "@/components/ScanResultCard";
 import { Gem } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -36,15 +36,9 @@ export default function Findings() {
       {findings.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {findings.map((finding) => (
-            <FindingCard
+            <ScanResultCard
               key={finding.id}
-              listingTitle={finding.listingTitle}
-              listingUrl={finding.listingUrl}
-              price={finding.price}
-              confidenceScore={finding.confidenceScore}
-              detectedMaterials={finding.detectedMaterials}
-              aiReasoning={finding.aiReasoning}
-              foundAt={finding.foundAt}
+              finding={finding}
               onDelete={() => deleteMutation.mutate(finding.id)}
             />
           ))}

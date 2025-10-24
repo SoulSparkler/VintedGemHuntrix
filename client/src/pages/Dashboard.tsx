@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import SearchQueryCard from "@/components/SearchQueryCard";
-import FindingCard from "@/components/FindingCard";
+import { ScanResultCard } from "@/components/ScanResultCard";
 import AddSearchDialog from "@/components/AddSearchDialog";
 import { Plus } from "lucide-react";
 import { useState } from "react";
@@ -127,15 +127,9 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold">Recent Findings</h2>
           <div className="space-y-4">
             {findings.slice(0, 2).map((finding) => (
-              <FindingCard
+              <ScanResultCard
                 key={finding.id}
-                listingTitle={finding.listingTitle}
-                listingUrl={finding.listingUrl}
-                price={finding.price}
-                confidenceScore={finding.confidenceScore}
-                detectedMaterials={finding.detectedMaterials}
-                aiReasoning={finding.aiReasoning}
-                foundAt={finding.foundAt}
+                finding={finding}
                 onDelete={() => deleteFindingMutation.mutate(finding.id)}
               />
             ))}

@@ -4,6 +4,12 @@ import { analyzeJewelryImages } from "./openai-analyzer";
 import { sendTelegramAlert } from "./telegram";
 import type { SearchQuery } from "@shared/schema";
 
+function getBuyAdvice(confidence: number, totalCost: number): "BUY" | "MAYBE" | "SKIP" {
+  if (confidence >= 80 && totalCost <= 20) return "BUY";
+  if (confidence >= 60 && totalCost <= 40) return "MAYBE";
+  return "SKIP";
+}
+
 export async function scanSearchQuery(searchQuery: SearchQuery): Promise<number> {
   console.log(`\n=== Starting scan for: ${searchQuery.searchLabel} ===`);
   
@@ -32,6 +38,9 @@ export async function scanSearchQuery(searchQuery: SearchQuery): Promise<number>
       if (analysis.confidenceScore >= searchQuery.confidenceThreshold && analysis.isValuable) {
         console.log(`✅ Valuable item found! Confidence: ${analysis.confidenceScore}%`);
         
+        const totalCost = (listing.price || 0) + 4.0;
+        const advice = getBuyAdvice(analysis.confidenceScore, totalCost);
+
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 15);
 
@@ -54,7 +63,8 @@ export async function scanSearchQuery(searchQuery: SearchQuery): Promise<number>
           listing.price,
           analysis.confidenceScore,
           analysis.detectedMaterials,
-          analysis.reasoning
+          analysis.reasoning,
+          advice
         );
 
         if (sent && finding) {

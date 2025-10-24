@@ -1,5 +1,5 @@
 import ManualScanForm from "@/components/ManualScanForm";
-import FindingCard from "@/components/FindingCard";
+import { ScanResultCard } from "@/components/ScanResultCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { useState } from "react";
@@ -75,15 +75,9 @@ export default function ManualScan() {
         <h2 className="text-xl font-semibold">Scan History</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {scans.map((scan) => (
-            <FindingCard
+            <ScanResultCard
               key={scan.id}
-              listingTitle={scan.listingTitle}
-              listingUrl={scan.listingUrl}
-              price={scan.price || "N/A"}
-              confidenceScore={scan.confidenceScore}
-              detectedMaterials={scan.detectedMaterials}
-              aiReasoning={scan.aiReasoning}
-              foundAt={scan.scannedAt}
+              finding={scan}
               onDelete={() => deleteMutation.mutate(scan.id)}
             />
           ))}

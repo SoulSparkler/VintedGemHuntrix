@@ -15,7 +15,8 @@ export async function sendTelegramAlert(
   price: string,
   confidenceScore: number,
   detectedMaterials: string[],
-  aiReasoning: string
+  aiReasoning: string,
+  advice: "BUY" | "MAYBE" | "SKIP"
 ): Promise<boolean> {
   if (!bot || !TELEGRAM_CHAT_ID) {
     console.warn("Telegram bot not configured - skipping alert");
@@ -31,6 +32,7 @@ export async function sendTelegramAlert(
 💰 Price: ${price}
 🎯 Confidence: ${confidenceScore}%
 💎 Materials: ${detectedMaterials.join(", ")}
+📈 Advice: ${advice}
 
 📝 AI Analysis:
 ${aiReasoning}

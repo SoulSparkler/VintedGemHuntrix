@@ -1,11 +1,10 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { ExternalLink, Trash2 } from "lucide-react";
 import MaterialBadge from "./MaterialBadge";
-import ConfidenceScore from "./ConfidenceScore";
+import { Progress } from "@/components/ui/progress";
 import { formatDistanceToNow } from "date-fns";
-import { useState } from "react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface FindingCardProps {
   listingTitle: string;
@@ -30,8 +29,6 @@ export default function FindingCard({
   thumbnailUrl,
   onDelete
 }: FindingCardProps) {
-  const [isOpen, setIsOpen] = useState(false);
-
   return (
     <Card className="hover-elevate">
       <CardHeader className="pb-3">
@@ -62,7 +59,12 @@ export default function FindingCard({
       <CardContent className="space-y-4">
         <div>
           <p className="text-xs text-muted-foreground mb-2">Confidence Score</p>
-          <ConfidenceScore score={confidenceScore} size="md" />
+          <div className="flex items-center gap-3">
+            <Progress value={confidenceScore} className="h-2" />
+            <span className="font-mono text-sm font-medium min-w-[3rem] text-right">
+              {confidenceScore}%
+            </span>
+          </div>
         </div>
 
         <div>
@@ -74,24 +76,18 @@ export default function FindingCard({
           </div>
         </div>
 
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CollapsibleTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="w-full justify-between"
-              data-testid="button-toggle-reasoning"
-            >
+        <Accordion type="single" collapsible defaultValue="item-1" className="w-full">
+          <AccordionItem value="item-1">
+            <AccordionTrigger>
               <span className="text-xs font-medium">AI Reasoning</span>
-              {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-2">
-            <p className="text-sm text-muted-foreground bg-muted p-3 rounded-md" data-testid="text-reasoning">
-              {aiReasoning}
-            </p>
-          </CollapsibleContent>
-        </Collapsible>
+            </AccordionTrigger>
+            <AccordionContent>
+              <p className="text-sm text-muted-foreground" data-testid="text-reasoning">
+                {aiReasoning}
+              </p>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         <div className="flex gap-2 pt-2 border-t">
           <Button

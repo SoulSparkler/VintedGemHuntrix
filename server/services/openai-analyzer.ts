@@ -9,38 +9,22 @@ interface AnalysisResult {
   isValuable: boolean;
   detectedMaterials: string[];
   reasoning: string;
-  specificFindings: Array<{
-    item: string;
-    evidence: string;
-  }>;
+  specificFindings: Array<{ item: string; evidence: string }>;
 }
 
-const ANALYSIS_PROMPT = `Analyze this jewelry image and determine if it contains genuine valuable materials.
+const ANALYSIS_PROMPT = `
+You are a professional jewelry authenticator.
+Analyze the provided images and determine if the jewelry contains genuine valuable materials.
 
 Look for:
-1. HALLMARKS/STAMPS: 
-   - Gold: 10K, 14K, 18K, 22K, 24K, 417, 585, 750, 916, 999
-   - Silver: 925, Sterling, 900, 800
-   - Platinum: 950, 900, PT, PLAT
+- Hallmarks: 10K, 14K, 18K, 22K, 24K, 417, 585, 750, 916, 999, 925, Sterling, PT, PLAT
+- Material clues (gold, silver, pearls, gemstones)
+- Craftsmanship quality
+- Signs of authenticity or value
 
-2. VISUAL CHARACTERISTICS:
-   - Gold: Rich yellow/rose color, weight appearance, wear patterns
-   - Silver: Bright metallic luster, tarnish patterns
-   - Pearls: Natural luster, irregular shape, surface texture
-   - Precious stones: Clarity, cut quality, color depth
+Return ONLY valid JSON — no explanations, no markdown, no intro text.
 
-3. CONTEXT CLUES:
-   - Professional craftsmanship
-   - Quality settings
-   - Age indicators
-
-Provide:
-- Confidence score (0-100%)
-- List of detected valuable materials
-- Specific reasoning with photo references
-- Whether this appears to be a "hidden gem" the seller may not recognize
-
-Format response as JSON:
+Example format:
 {
   "confidence_score": 85,
   "is_valuable": true,
@@ -50,7 +34,8 @@ Format response as JSON:
     {"item": "14K Gold clasp", "evidence": "585 stamp visible in photo 2"},
     {"item": "Natural pearl", "evidence": "Irregular surface, orient luster in photo 1"}
   ]
-}`;
+}
+`;
 
 export async function analyzeJewelryImages(
   imageUrls: string[],
@@ -68,54 +53,60 @@ export async function analyzeJewelryImages(
     };
   }
 
-  try {
-    const messages: any[] = [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: `${ANALYSIS_PROMPT}\n\nListing title: "${listingTitle}"` },
-          ...imageUrls.slice(0, 4).map(url => ({
-            type: "image_url",
-            image_url: { url, detail: "high" }
-          })),
-        ],
-      },
-    ];
+  const messages: any[] = [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: `${ANALYSIS_PROMPT}\n\nListing title: "${listingTitle}"` },
+        ...imageUrls.slice(0, 4).map(url => ({
+          type: "image_url",
+          image_url: { url, detail: "high" },
+        })),
+      ],
+    },
+  ];
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
-      max_tokens: 1000,
-      temperature: 0.3,
-    });
+  const modelsToTry = ["gpt-4o", "gpt-4o-mini"];
+  let lastError: any = null;
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error("No response from OpenAI");
+  for (const model of modelsToTry) {
+    try {
+      console.log(`Attempting analysis with model: ${model}`);
+
+      const response = await openai.chat.completions.create({
+        model,
+        messages,
+        max_tokens: 1000,
+        temperature: 0.2,
+        response_format: { type: "json_object" }, // ✅ Force JSON-only
+      });
+
+      const result = response.choices[0]?.message?.content;
+      if (!result) throw new Error("No response content received");
+
+      const parsed = JSON.parse(result);
+
+      console.log(`✅ Analysis succeeded with ${model}`);
+
+      return {
+        confidenceScore: parsed.confidence_score ?? 0,
+        isValuable: parsed.is_valuable ?? false,
+        detectedMaterials: parsed.detected_materials ?? [],
+        reasoning: parsed.reasoning ?? "Analysis completed",
+        specificFindings: parsed.specific_findings ?? [],
+      };
+    } catch (error: any) {
+      console.error(`❌ Error analyzing with ${model}:`, error.message);
+      lastError = error;
     }
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Could not parse JSON from response");
-    }
-
-    const result = JSON.parse(jsonMatch[0]);
-
-    return {
-      confidenceScore: result.confidence_score || 0,
-      isValuable: result.is_valuable || false,
-      detectedMaterials: result.detected_materials || [],
-      reasoning: result.reasoning || "Analysis completed",
-      specificFindings: result.specific_findings || [],
-    };
-  } catch (error: any) {
-    console.error("Error analyzing with OpenAI:", error.message);
-    return {
-      confidenceScore: 0,
-      isValuable: false,
-      detectedMaterials: [],
-      reasoning: `Analysis failed: ${error.message}`,
-      specificFindings: [],
-    };
   }
+
+  // If both models fail:
+  return {
+    confidenceScore: 0,
+    isValuable: false,
+    detectedMaterials: [],
+    reasoning: `Analysis failed: ${lastError?.message || "Unknown error"}`,
+    specificFindings: [],
+  };
 }

@@ -34,12 +34,15 @@ export async function scrapeVintedSearch(searchUrl: string): Promise<VintedListi
 
     const items = response.data?.items ?? [];
 
+    const domainMatch = searchUrl.match(/vinted\.[a-z.]+/);
+    const domain = domainMatch ? domainMatch[0] : "www.vinted.nl";
+
     const listings: VintedListing[] = items.map((item: any) => ({
       listingId: item.id.toString(),
       title: item.title,
       price: item.price?.string || `${item.price?.amount} ${item.price?.currency}`,
       imageUrls: item.photos?.map((p: any) => p.url).filter(Boolean) || [],
-      listingUrl: `https://www.vinted.nl/items/${item.id}`,
+      listingUrl: `https://${domain}/items/${item.id}`,
     }));
 
     console.log(`✅ Found ${listings.length} listings`);
@@ -72,12 +75,15 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
       return null;
     }
 
+    const domainMatch = listingUrl.match(/vinted\.[a-z.]+/);
+    const domain = domainMatch ? domainMatch[0] : "www.vinted.nl";
+
     return {
       listingId: item.id.toString(),
       title: item.title,
       price: item.price?.string || `${item.price?.amount} ${item.price?.currency}`,
       imageUrls: item.photos?.map((p: any) => p.url).filter(Boolean) || [],
-      listingUrl: `https://www.vinted.nl/items/${item.id}`,
+      listingUrl: `https://${domain}/items/${item.id}`,
     };
   } catch (error: any) {
     console.error("❌ Error scraping Vinted listing:", error.message);

@@ -88,21 +88,32 @@ export async function analyzeJewelryImages(
   }
 
   try {
-    const messages: any[] = [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: `${ANALYSIS_PROMPT}\n\nListing title: "${listingTitle}"` },
-          ...imageUrls.slice(0, 4).map(url => ({
-            type: "image_url",
-            image_url: { url, detail: "high" }
-          })),
-        ],
-      },
+    // Correctly type the content parts for the user message
+    const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+      { type: 'text', text: `${ANALYSIS_PROMPT}\n\nListing title: "${listingTitle}"` },
+      // Map image URLs to the correct format for the API
+      ...imageUrls.slice(0, 4).map(
+        (url): OpenAI.Chat.Completions.ChatCompletionContentPartImage => ({
+          type: 'image_url',
+          image_url: { url, detail: 'high' },
+        }),
+      ),
+    ];
+
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        {
+          role: "system",
+          content: "You are a JSON API that analyzes images of vintage listings. Always respond with valid JSON only.",
+        },
+        {
+          role: "user",
+          content: userContent,
+        },
     ];
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
       messages,
       max_tokens: 1000,
       temperature: 0.3,
@@ -113,12 +124,7 @@ export async function analyzeJewelryImages(
       throw new Error("No response from OpenAI");
     }
 
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Could not parse JSON from response");
-    }
-
-    const result = JSON.parse(jsonMatch[0]);
+    const result = JSON.parse(content);
 
     return {
       confidenceScore: result.confidence_score || 0,

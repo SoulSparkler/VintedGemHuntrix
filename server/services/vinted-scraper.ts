@@ -84,8 +84,6 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
   console.log(`Scraping single Vinted listing: ${listingUrl}`);
   
   try {
-    await delay(1500 + Math.random() * 2000);
-
     const headers = {
       "User-Agent": getRandomUserAgent(),
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -93,71 +91,41 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
     };
 
     const { data: html } = await axios.get(listingUrl, { headers, timeout: 15000 });
-    const $ = cheerio.load(html);
     
     const listingIdMatch = listingUrl.match(/\/items\/(\d+)/);
     if (!listingIdMatch) {
-      console.error('Could not extract listing ID from URL');
-      return null;
+      throw new Error("Could not extract listing ID from URL");
     }
     const listingId = listingIdMatch[1];
 
-    let imageUrls: string[] = [];
+    const jsonMatch = html.match(/window\.__INITIAL_DATA__\s*=\s*(\{.*?\});/s);
+    if (jsonMatch) {
+      try {
+        const jsonData = JSON.parse(jsonMatch[1]);
+        const item = jsonData.item.item;
+        const imageUrls = item.photos.map((p: any) => p.url).filter(Boolean);
+        return {
+          listingId,
+          title: item.title,
+          price: `${item.price.amount} ${item.price.currency}`,
+          imageUrls,
+          listingUrl,
+        };
+      } catch (err: any) {
+        console.warn("⚠️ JSON parsing failed:", err.message);
+      }
+    }
 
-    // --- Primary extraction: Cheerio ---
+    // Fallback to cheerio if JSON parsing fails
+    const $ = cheerio.load(html);
+    const title = $('h1').first().text().trim() || 'Untitled';
+    const price = $('.price-box__price').first().text().trim() || 'Price not available';
+    let imageUrls: string[] = [];
     $("img").each((i, el) => {
       const src = $(el).attr("src") || $(el).attr("data-src");
       if (src && src.includes("vinted.net")) imageUrls.push(src);
     });
-    imageUrls = [...new Set(imageUrls)]; // Remove duplicates
-
-    // --- Fallback 1: Extract from embedded JSON in HTML ---
-    if (imageUrls.length === 0) {
-      const jsonMatch = html.match(/window\.__INITIAL_DATA__\s*=\s*(\{.*?\});/s);
-      if (jsonMatch) {
-        try {
-          const jsonData = JSON.parse(jsonMatch[1]);
-          // A bit risky, but effective: stringify and regex out all possible image URLs
-          const photoCandidates = JSON.stringify(jsonData).match(
-            /(https:\/\/[^\s"']+\/vinted\.net[^\s"']+)/g
-          );
-          if (photoCandidates?.length) {
-            imageUrls = [...new Set(photoCandidates)];
-            console.log(`✅ Extracted ${imageUrls.length} images from embedded JSON`);
-          }
-        } catch (err: any) {
-          console.warn("⚠️ JSON parsing failed in fallback 1:", err.message);
-        }
-      }
-    }
-
-    // --- Fallback 2: Try ?format=json endpoint ---
-    if (imageUrls.length === 0) {
-      try {
-        const jsonUrl = listingUrl + (listingUrl.includes("?") ? "&" : "?") + "format=json";
-        const { data: jsonData } = await axios.get(jsonUrl, { headers, timeout: 10000 });
-        const jsonString = JSON.stringify(jsonData);
-        const photoCandidates = jsonString.match(
-          /(https:\/\/[^\s"']+\/vinted\.net[^\s"']+)/g
-        );
-        if (photoCandidates?.length) {
-          imageUrls = [...new Set(photoCandidates)];
-          console.log(`✅ Extracted ${imageUrls.length} images from JSON endpoint`);
-        }
-      } catch (err: any) {
-        console.warn("⚠️ JSON fallback request failed:", err.message);
-      }
-    }
-
-    if (imageUrls.length === 0) {
-      console.warn(`⚠️ No images found for ${listingUrl}`);
-    } else {
-      console.log(`🖼️ Found ${imageUrls.length} image(s) for ${listingUrl}`);
-    }
-
-    // Extract other details
-    const title = $('h1').first().text().trim() || 'Untitled';
-    const price = $('.price-box__price').first().text().trim() || 'Price not available';
+    imageUrls = [...new Set(imageUrls)];
 
     return {
       listingId,
@@ -166,6 +134,7 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
       imageUrls,
       listingUrl,
     };
+
   } catch (error: any) {
     console.error(`❌ Error scraping ${listingUrl}:`, error.message);
     return null;

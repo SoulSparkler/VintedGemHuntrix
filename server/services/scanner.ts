@@ -12,6 +12,8 @@ function getBuyAdvice(confidence: number, totalCost: number): "BUY" | "MAYBE" | 
 
 export async function scanSearchQuery(searchQuery: SearchQuery): Promise<number> {
   console.log(`\n=== Starting scan for: ${searchQuery.searchLabel} ===`);
+  const startMemory = process.memoryUsage();
+  console.log(`Initial memory usage: ${JSON.stringify(startMemory)}`);
   
   try {
     const listings = await scrapeVintedSearch(searchQuery.vintedUrl);
@@ -80,6 +82,8 @@ export async function scanSearchQuery(searchQuery: SearchQuery): Promise<number>
     }
 
     await storage.updateLastScanned(searchQuery.id);
+    const endMemory = process.memoryUsage();
+    console.log(`Final memory usage: ${JSON.stringify(endMemory)}`);
     console.log(`=== Scan complete: ${newFindings} new findings ===\n`);
     
     return newFindings;

@@ -41,8 +41,12 @@ export default function App() {
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
                 <ThemeToggle />
               </header>
+import ErrorBoundary from "@/components/ErrorBoundary";
+
               <main className="flex-1 overflow-auto p-6 lg:p-8">
-                <Router />
+                <ErrorBoundary>
+                  <Router />
+                </ErrorBoundary>
               </main>
             </div>
           </div>

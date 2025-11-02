@@ -103,7 +103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Manual Analysis
-  app.post("/api/analyze-listing", async (req, res) => {
+  app.post("/api/manual-scan", async (req, res) => {
     try {
       const { url } = req.body;
       
@@ -123,17 +123,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         listingUrl: url,
         listingTitle: listing.title,
         confidenceScore: analysis.confidenceScore,
+        isGoldLikely: analysis.isValuable,
         aiReasoning: analysis.reasoning,
         detectedMaterials: analysis.detectedMaterials,
         price: listing.price,
       });
 
       res.json({
-        ...scan,
-        isValuable: analysis.isValuable,
+        listingUrl: url,
+        isGoldLikely: analysis.isValuable,
+        confidence: analysis.confidenceScore,
+        reasons: analysis.reasoning.split("\n"),
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("Error in manual-scan endpoint:", error);
+      res.status(500).json({ error: "An unexpected error occurred." });
     }
   });
 

@@ -1,5 +1,5 @@
 import ManualScanForm from "@/components/ManualScanForm";
-import { ScanResultCard } from "@/components/ScanResultCard";
+import { ManualScanResultCard } from "@/components/ManualScanResultCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import { useState } from "react";
@@ -8,8 +8,16 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { ManualScan } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
+interface ScanResult {
+  listingUrl: string;
+  isGoldLikely: boolean;
+  confidence: number;
+  reasons: string[];
+}
+
 export default function ManualScan() {
   const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const { toast } = useToast();
 
   const { data: scans = [] } = useQuery<ManualScan[]>({
@@ -17,15 +25,16 @@ export default function ManualScan() {
   });
 
   const scanMutation = useMutation({
-    mutationFn: (url: string) => apiRequest("POST", "/api/analyze-listing", { url }),
-    onSuccess: () => {
+    mutationFn: (url: string) => apiRequest("POST", "/api/manual-scan", { url }),
+    onSuccess: (data: ScanResult) => {
+      setScanResult(data);
       queryClient.invalidateQueries({ queryKey: ["/api/manual-scans"] });
       toast({ title: "Analysis complete!" });
       setIsScanning(false);
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Analysis failed", 
+      toast({
+        title: "Analysis failed",
         description: error.message,
         variant: "destructive"
       });
@@ -43,6 +52,7 @@ export default function ManualScan() {
 
   const handleScan = (url: string) => {
     setIsScanning(true);
+    setScanResult(null);
     scanMutation.mutate(url);
   };
 
@@ -56,6 +66,10 @@ export default function ManualScan() {
       </div>
 
       <ManualScanForm onScan={handleScan} isScanning={isScanning} />
+
+      {scanResult && (
+        <ManualScanResultCard scan={scanResult} onDelete={() => setScanResult(null)} />
+      )}
 
       <Card className="bg-muted/50 border-chart-2/20">
         <CardContent className="pt-6">
@@ -73,15 +87,24 @@ export default function ManualScan() {
 
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Scan History</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          {scans.map((scan) => (
-            <ScanResultCard
-              key={scan.id}
-              finding={scan}
-              onDelete={() => deleteMutation.mutate(scan.id)}
-            />
-          ))}
-        </div>
+        {scans && scans.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {scans.map((scan) => (
+              <ManualScanResultCard
+                key={scan.id}
+                scan={{
+                  listingUrl: scan.listingUrl,
+                  isGoldLikely: scan.isGoldLikely,
+                  confidence: scan.confidenceScore / 100,
+                  reasons: scan.aiReasoning.split("\n"),
+                }}
+                onDelete={() => deleteMutation.mutate(scan.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <p>No scan history yet.</p>
+        )}
       </div>
     </div>
   );

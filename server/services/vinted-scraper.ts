@@ -1,6 +1,6 @@
-import fetch from "node-fetch";
 import axios from "axios";
 import * as cheerio from "cheerio";
+import puppeteer from "puppeteer";
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -82,61 +82,67 @@ export async function scrapeVintedSearch(searchUrl: string): Promise<VintedListi
 
 export async function scrapeVintedListing(listingUrl: string): Promise<VintedListing | null> {
   console.log(`Scraping single Vinted listing: ${listingUrl}`);
-  
+  let browser;
   try {
-    const headers = {
-      "User-Agent": getRandomUserAgent(),
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-    };
+    browser = await puppeteer.launch({
+      args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setRequestInterception(true);
 
-    const { data: html } = await axios.get(listingUrl, { headers, timeout: 15000 });
-    
+    page.on('request', (req) => {
+      if (['image', 'media', 'font', 'stylesheet'].includes(req.resourceType())) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    await page.goto(listingUrl, { waitUntil: 'domcontentloaded' });
+
     const listingIdMatch = listingUrl.match(/\/items\/(\d+)/);
     if (!listingIdMatch) {
       throw new Error("Could not extract listing ID from URL");
     }
     const listingId = listingIdMatch[1];
 
-    const jsonMatch = html.match(/window\.__INITIAL_DATA__\s*=\s*(\{.*?\});/s);
-    if (jsonMatch) {
-      try {
-        const jsonData = JSON.parse(jsonMatch[1]);
-        const item = jsonData.item.item;
-        const imageUrls = item.photos.map((p: any) => p.url).filter(Boolean);
-        return {
-          listingId,
-          title: item.title,
-          price: `${item.price.amount} ${item.price.currency}`,
-          imageUrls,
-          listingUrl,
-        };
-      } catch (err: any) {
-        console.warn("⚠️ JSON parsing failed:", err.message);
+    const initialData = await page.evaluate(() => {
+      const script = Array.from(document.querySelectorAll('script')).find(s => s.textContent?.includes('window.__INITIAL_DATA__'));
+      return script?.textContent;
+    });
+
+    if (initialData) {
+      const jsonMatch = initialData.match(/window\.__INITIAL_DATA__\s*=\s*(\{.*?\});/s);
+      if (jsonMatch) {
+        try {
+          const jsonData = JSON.parse(jsonMatch[1]);
+          const item = jsonData.item.item;
+          const imageUrls = item.photos.map((p: any) => p.url).filter(Boolean);
+          return {
+            listingId,
+            title: item.title,
+            price: `${item.price.amount} ${item.price.currency}`,
+            imageUrls,
+            listingUrl,
+          };
+        } catch (err: any) {
+          console.warn("⚠️ JSON parsing failed:", err.message);
+        }
       }
     }
 
-    // Fallback to cheerio if JSON parsing fails
-    const $ = cheerio.load(html);
-    const title = $('h1').first().text().trim() || 'Untitled';
-    const price = $('.price-box__price').first().text().trim() || 'Price not available';
-    let imageUrls: string[] = [];
-    $("img").each((i, el) => {
-      const src = $(el).attr("src") || $(el).attr("data-src");
-      if (src && src.includes("vinted.net")) imageUrls.push(src);
-    });
-    imageUrls = [...new Set(imageUrls)];
-
-    return {
-      listingId,
-      title,
-      price,
-      imageUrls,
-      listingUrl,
-    };
+    return null;
 
   } catch (error: any) {
     console.error(`❌ Error scraping ${listingUrl}:`, error.message);
     return null;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+    // Optional: force garbage collection
+    if (global.gc) {
+      global.gc();
+    }
   }
 }

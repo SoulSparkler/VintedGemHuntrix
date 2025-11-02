@@ -43,6 +43,7 @@ export const manualScans = pgTable("manual_scans", {
   listingUrl: text("listing_url").notNull(),
   listingTitle: text("listing_title").notNull(),
   confidenceScore: integer("confidence_score").notNull(),
+  isGoldLikely: boolean("is_gold_likely").notNull(),
   aiReasoning: text("ai_reasoning").notNull(),
   detectedMaterials: jsonb("detected_materials").notNull().$type<string[]>(),
   price: text("price"),

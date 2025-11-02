@@ -45,11 +45,11 @@ async function runScheduledScans() {
 }
 
 export function startScheduler() {
-  cron.schedule("0 * * * *", () => {
+  cron.schedule("*/15 * * * *", () => {
     runScheduledScans().catch((err) => {
       console.error("Scheduler error:", err);
     });
   });
 
-  console.log("📅 Scheduler started - running every hour");
+  console.log("📅 Scheduler started - running every 15 minutes");
 }

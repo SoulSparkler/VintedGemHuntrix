@@ -1,18 +1,27 @@
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { hallmarkToPurity } from "@/utils/hallmarkToPurity";
+import { timeAgo } from "@/utils/timeAgo";
 import { Button } from "./ui/button";
 import { Trash2 } from "lucide-react";
+import type { Finding, ManualScan } from "@shared/schema";
 
-export function ScanResultCard({ finding, onDelete }) {
+type ScanResultCardProps = {
+  finding: Finding | ManualScan;
+  onDelete: () => void;
+};
+
+export function ScanResultCard({ finding, onDelete }: ScanResultCardProps) {
   const hallmarkInfo = hallmarkToPurity(finding.aiReasoning);
-  const totalCost = (finding.price || 0) + 4;
+  const totalCost = (Number(finding.price) || 0) + 4;
   const advice =
     finding.confidenceScore >= 80 && totalCost <= 20
       ? "BUY"
       : finding.confidenceScore >= 60
       ? "MAYBE"
       : "SKIP";
+
+  const timeText = "foundAgo" in finding ? `Found ${finding.foundAgo}` : `Scanned ${timeAgo(finding.scannedAt)}`;
 
   return (
     <Card className="p-4 bg-neutral-900 text-neutral-100 shadow-lg border border-neutral-700">
@@ -31,7 +40,7 @@ export function ScanResultCard({ finding, onDelete }) {
         </span>
       </div>
 
-      <p className="text-sm mt-1 opacity-80">Found {finding.foundAgo}</p>
+      <p className="text-sm mt-1 opacity-80">{timeText}</p>
 
       <div className="mt-3">
         <div className="flex justify-between text-sm">

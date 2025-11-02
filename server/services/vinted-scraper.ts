@@ -1,6 +1,5 @@
-import fetch from "node-fetch";
-import axios from "axios";
-import * as cheerio from "cheerio";
+import puppeteer from 'puppeteer';
+import * as cheerio from 'cheerio';
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -13,10 +12,6 @@ function getRandomUserAgent(): string {
   return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 export interface VintedListing {
   listingId: string;
   title: string;
@@ -26,24 +21,26 @@ export interface VintedListing {
 }
 
 export async function scrapeVintedSearch(searchUrl: string): Promise<VintedListing[]> {
-  console.log(`Scraping Vinted search: ${searchUrl}`);
-  
+  console.log(`Scraping Vinted search with Puppeteer: ${searchUrl}`);
+  const browser = await puppeteer.launch({ headless: true, args: ["--disable-dev-shm-usage"] });
+  const page = await browser.newPage();
+  await page.setUserAgent(getRandomUserAgent());
+
   try {
-    await delay(2000 + Math.random() * 3000);
-    
-    const response = await axios.get(searchUrl, {
-      headers: {
-        'User-Agent': getRandomUserAgent(),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      timeout: 15000,
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const t = req.resourceType();
+      if (t === 'image' || t === 'font' || t === 'stylesheet' || t === 'media') {
+        req.abort();
+      } else {
+        req.continue();
+      }
     });
 
-    const $ = cheerio.load(response.data);
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+
+    const content = await page.content();
+    const $ = cheerio.load(content);
     const listings: VintedListing[] = [];
 
     const scriptTags = $('script').toArray();
@@ -77,55 +74,44 @@ export async function scrapeVintedSearch(searchUrl: string): Promise<VintedListi
   } catch (error: any) {
     console.error('Error scraping Vinted:', error.message);
     return [];
+  } finally {
+    await page.close();
+    await browser.close();
+    global.gc?.();
   }
 }
 
 export async function scrapeVintedListing(listingUrl: string): Promise<VintedListing | null> {
-  console.log(`Scraping single Vinted listing: ${listingUrl}`);
-  
-  try {
-    const headers = {
-      "User-Agent": getRandomUserAgent(),
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-    };
+  console.log(`Scraping single Vinted listing with Puppeteer: ${listingUrl}`);
+  const browser = await puppeteer.launch({ headless: true, args: ["--disable-dev-shm-usage"] });
+  const page = await browser.newPage();
+  await page.setUserAgent(getRandomUserAgent());
 
-    const { data: html } = await axios.get(listingUrl, { headers, timeout: 15000 });
-    
+  try {
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const t = req.resourceType();
+      if (t === 'image' || t === 'font' || t === 'stylesheet' || t === 'media') {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    await page.goto(listingUrl, { waitUntil: 'domcontentloaded' });
+
     const listingIdMatch = listingUrl.match(/\/items\/(\d+)/);
     if (!listingIdMatch) {
       throw new Error("Could not extract listing ID from URL");
     }
     const listingId = listingIdMatch[1];
 
-    const jsonMatch = html.match(/window\.__INITIAL_DATA__\s*=\s*(\{.*?\});/s);
-    if (jsonMatch) {
-      try {
-        const jsonData = JSON.parse(jsonMatch[1]);
-        const item = jsonData.item.item;
-        const imageUrls = item.photos.map((p: any) => p.url).filter(Boolean);
-        return {
-          listingId,
-          title: item.title,
-          price: `${item.price.amount} ${item.price.currency}`,
-          imageUrls,
-          listingUrl,
-        };
-      } catch (err: any) {
-        console.warn("⚠️ JSON parsing failed:", err.message);
-      }
-    }
+    const imageUrls = await page.$$eval("img", imgs => imgs.map(i => i.src).slice(0, 4));
 
-    // Fallback to cheerio if JSON parsing fails
-    const $ = cheerio.load(html);
+    const content = await page.content();
+    const $ = cheerio.load(content);
     const title = $('h1').first().text().trim() || 'Untitled';
     const price = $('.price-box__price').first().text().trim() || 'Price not available';
-    let imageUrls: string[] = [];
-    $("img").each((i, el) => {
-      const src = $(el).attr("src") || $(el).attr("data-src");
-      if (src && src.includes("vinted.net")) imageUrls.push(src);
-    });
-    imageUrls = [...new Set(imageUrls)];
 
     return {
       listingId,
@@ -134,9 +120,12 @@ export async function scrapeVintedListing(listingUrl: string): Promise<VintedLis
       imageUrls,
       listingUrl,
     };
-
   } catch (error: any) {
     console.error(`❌ Error scraping ${listingUrl}:`, error.message);
     return null;
+  } finally {
+    await page.close();
+    await browser.close();
+    global.gc?.();
   }
 }

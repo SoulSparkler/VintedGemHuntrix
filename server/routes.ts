@@ -167,6 +167,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "ok" });
   });
 
+  app.get("/api/db-health", async (_req, res) => {
+    try {
+      const { db } = await import("./db");
+      const r = await db.execute("select now() as now");
+      res.json({ ok: true, now: r[0]?.now });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: String(e) });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

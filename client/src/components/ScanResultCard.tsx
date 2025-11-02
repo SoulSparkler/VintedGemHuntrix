@@ -1,34 +1,35 @@
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { hallmarkToPurity } from "@/utils/hallmarkToPurity";
 import { Button } from "./ui/button";
 import { Trash2 } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 export function ScanResultCard({ finding, onDelete }) {
-  const hallmarkInfo = hallmarkToPurity(finding.aiReasoning);
-  const totalCost = (finding.price || 0) + 4;
-  const advice =
-    finding.confidenceScore >= 80 && totalCost <= 20
-      ? "BUY"
-      : finding.confidenceScore >= 60
-      ? "MAYBE"
-      : "SKIP";
+  const getRecommendationClass = (recommendation) => {
+    if (recommendation?.startsWith("✅")) return "bg-green-600";
+    if (recommendation?.startsWith("🤔")) return "bg-yellow-600";
+    if (recommendation?.startsWith("❌")) return "bg-red-600";
+    return "bg-gray-600";
+  };
 
   return (
     <Card className="p-4 bg-neutral-900 text-neutral-100 shadow-lg border border-neutral-700">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-semibold">{finding.listingTitle}</h2>
-        <span
-          className={`px-3 py-1 rounded-full text-sm font-medium ${
-            advice === "BUY"
-              ? "bg-green-600"
-              : advice === "MAYBE"
-              ? "bg-yellow-600"
-              : "bg-red-600"
-          }`}
-        >
-          {advice}
-        </span>
+        {finding.buyRecommendation && (
+          <span
+            className={`px-3 py-1 rounded-full text-sm font-medium ${getRecommendationClass(
+              finding.buyRecommendation
+            )}`}
+          >
+            {finding.buyRecommendation}
+          </span>
+        )}
       </div>
 
       <p className="text-sm mt-1 opacity-80">Found {finding.foundAgo}</p>
@@ -41,9 +42,9 @@ export function ScanResultCard({ finding, onDelete }) {
         <Progress value={finding.confidenceScore} className="h-2 mt-1" />
       </div>
 
-      {hallmarkInfo && (
-        <div className="mt-2 text-sm text-gray-300">
-          Hallmark {hallmarkInfo.karat} → {hallmarkInfo.percentage}% {hallmarkInfo.metal}
+      {finding.hallmarkPurity && (
+        <div className="mt-2 text-sm text-cyan-300 bg-cyan-900/50 px-2 py-1 rounded-md">
+          <strong>Hallmark Detected:</strong> {finding.hallmarkPurity}
         </div>
       )}
 
@@ -58,14 +59,18 @@ export function ScanResultCard({ finding, onDelete }) {
         </div>
       </div>
 
-      <div className="mt-4 border-t border-gray-700 pt-3">
-        <p className="font-semibold text-sm mb-1">AI Reasoning</p>
-        <p className="text-gray-200 text-sm whitespace-pre-wrap">
-          {finding.aiReasoning}
-        </p>
-      </div>
+      <Accordion type="single" collapsible defaultValue="item-1" className="w-full mt-2">
+        <AccordionItem value="item-1">
+          <AccordionTrigger className="font-semibold text-sm pt-2 pb-1">
+            AI Reasoning
+          </AccordionTrigger>
+          <AccordionContent className="text-gray-200 text-sm whitespace-pre-wrap pt-2">
+            {finding.aiReasoning}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
-      <div className="mt-4 text-sm">
+      <div className="mt-4 text-sm border-t border-gray-700 pt-4">
         <p>
           <span className="opacity-70">Item price:</span> €{finding.price?.toFixed(2) || "N/A"}
         </p>
@@ -73,7 +78,7 @@ export function ScanResultCard({ finding, onDelete }) {
           <span className="opacity-70">Shipping:</span> €4.00
         </p>
         <p className="font-semibold">
-          Total: €{totalCost.toFixed(2)}
+          Total: €{((finding.price || 0) + 4).toFixed(2)}
         </p>
       </div>
 

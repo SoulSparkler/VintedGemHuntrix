@@ -13,7 +13,8 @@ type ScanResultCardProps = {
 
 export function ScanResultCard({ finding, onDelete }: ScanResultCardProps) {
   const hallmarkInfo = hallmarkToPurity(finding.aiReasoning);
-  const totalCost = (Number(finding.price) || 0) + 4;
+  const numericPrice = Number(finding.price);
+  const totalCost = (numericPrice || 0) + 4;
   const advice =
     finding.confidenceScore >= 80 && totalCost <= 20
       ? "BUY"

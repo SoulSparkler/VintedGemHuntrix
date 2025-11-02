@@ -36,6 +36,13 @@ app.use(
   })
 );
 
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === 'development') {
+    res.set("Cache-Control", "no-store");
+  }
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

@@ -18,52 +18,37 @@ interface AnalysisResult {
   isValuable: boolean;
   detectedMaterials: string[];
   reasoning: string;
-  specificFindings: Array<{
-    item: string;
-    evidence: string;
-  }>;
 }
 
-const ANALYSIS_PROMPT = `Analyze this jewelry image and determine if it contains genuine valuable materials.
+const schema = {
+  name: "JewelryAssessment",
+  schema: {
+    type: "object",
+    properties: {
+      listingUrl: { type: "string" },
+      isGoldLikely: { type: "boolean" },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      reasons: { type: "array", items: { type: "string" } }
+    },
+    required: ["listingUrl", "isGoldLikely", "confidence", "reasons"],
+    additionalProperties: false
+  },
+  strict: true
+};
 
-Look for:
-1. HALLMARKS/STAMPS: 
-   - Gold: 10K, 14K, 18K, 22K, 24K, 417, 585, 750, 916, 999
-   - Silver: 925, Sterling, 900, 800
-   - Platinum: 950, 900, PT, PLAT
-
-2. VISUAL CHARACTERISTICS:
-   - Gold: Rich yellow/rose color, weight appearance, wear patterns
-   - Silver: Bright metallic luster, tarnish patterns
-   - Pearls: Natural luster, irregular shape, surface texture
-   - Precious stones: Clarity, cut quality, color depth
-
-3. CONTEXT CLUES:
-   - Professional craftsmanship
-   - Quality settings
-   - Age indicators
-
-Provide:
-- Confidence score (0-100%)
-- List of detected valuable materials
-- Specific reasoning with photo references
-- Whether this appears to be a "hidden gem" the seller may not recognize
-
-Format response as JSON:
-{
-  "confidence_score": 85,
-  "is_valuable": true,
-  "detected_materials": ["14K Gold", "Real Pearl"],
-  "reasoning": "Clear 585 hallmark visible on clasp in photo 2. Pearl shows natural luster and irregular surface texture consistent with genuine pearls.",
-  "specific_findings": [
-    {"item": "14K Gold clasp", "evidence": "585 stamp visible in photo 2"},
-    {"item": "Natural pearl", "evidence": "Irregular surface, orient luster in photo 1"}
-  ]
-}`;
+function safeParseJSON(s: string): { ok: boolean; value?: any; error?: string; raw?: string } {
+  try { return { ok: true, value: JSON.parse(s) }; }
+  catch {
+    const m = s.match(/\{[\s\S]*\}$/);
+    if (m) { try { return { ok: true, value: JSON.parse(m[0]) }; } catch { } }
+    return { ok: false, error: "Invalid JSON", raw: s };
+  }
+}
 
 export async function analyzeJewelryImages(
   imageUrls: string[],
-  listingTitle: string
+  listingTitle: string,
+  listingUrl: string
 ): Promise<AnalysisResult> {
   if (!openai) {
     return {
@@ -71,7 +56,6 @@ export async function analyzeJewelryImages(
       isValuable: false,
       detectedMaterials: [],
       reasoning: "Image analysis is disabled because OPENAI_API_KEY is not configured.",
-      specificFindings: [],
     };
   }
 
@@ -83,49 +67,42 @@ export async function analyzeJewelryImages(
       isValuable: false,
       detectedMaterials: [],
       reasoning: "No images available for analysis",
-      specificFindings: [],
     };
   }
 
   try {
-    const messages: any[] = [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: `${ANALYSIS_PROMPT}\n\nListing title: "${listingTitle}"` },
-          ...imageUrls.slice(0, 4).map(url => ({
-            type: "image_url",
-            image_url: { url, detail: "high" }
-          })),
+    const resp = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+            { role: "system", content: "Return only valid JSON that matches the schema." },
+            {
+                role: "user", content: [
+                    { type: "text", text: `Assess for real gold.\nURL: ${listingUrl}\nTitle: ${listingTitle}` },
+                    ...imageUrls.slice(0, 4).map(u => ({ type: "image_url", image_url: { url: u } }))
+                ]
+            }
         ],
-      },
-    ];
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
-      max_tokens: 1000,
-      temperature: 0.3,
+        response_format: { type: "json_object" },
+        max_tokens: 300
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = resp.choices[0]?.message?.content;
     if (!content) {
       throw new Error("No response from OpenAI");
     }
 
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    const parsed = safeParseJSON(content);
+    if (!parsed.ok) {
       throw new Error("Could not parse JSON from response");
     }
 
-    const result = JSON.parse(jsonMatch[0]);
+    const result = parsed.value;
 
     return {
-      confidenceScore: result.confidence_score || 0,
-      isValuable: result.is_valuable || false,
-      detectedMaterials: result.detected_materials || [],
-      reasoning: result.reasoning || "Analysis completed",
-      specificFindings: result.specific_findings || [],
+      confidenceScore: result.confidence * 100,
+      isValuable: result.isGoldLikely,
+      detectedMaterials: [], // The new schema does not include this field
+      reasoning: result.reasons.join("\n"),
     };
   } catch (error: any) {
     console.error("Error analyzing with OpenAI:", error.message);
@@ -134,7 +111,6 @@ export async function analyzeJewelryImages(
       isValuable: false,
       detectedMaterials: [],
       reasoning: `Analysis failed: ${error.message}`,
-      specificFindings: [],
     };
   }
 }

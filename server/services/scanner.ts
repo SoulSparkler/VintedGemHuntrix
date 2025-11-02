@@ -28,7 +28,7 @@ export async function scanSearchQuery(searchQuery: SearchQuery): Promise<number>
 
       console.log(`Analyzing new listing: ${listing.title}`);
       
-      const analysis = await analyzeJewelryImages(listing.imageUrls, listing.title);
+      const analysis = await analyzeJewelryImages(listing.imageUrls, listing.title, listing.listingUrl);
 
       await storage.createAnalyzedListing({
         listingId: listing.listingId,

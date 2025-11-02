@@ -117,7 +117,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Could not fetch listing" });
       }
 
-      const analysis = await analyzeJewelryImages(listing.imageUrls, listing.title);
+      const analysis = await analyzeJewelryImages(listing.imageUrls, listing.title, listing.listingUrl);
 
       const scan = await storage.createManualScan({
         listingUrl: url,
@@ -132,7 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         listingUrl: url,
         isGoldLikely: analysis.isValuable,
-        confidence: analysis.confidenceScore,
+        confidence: analysis.confidenceScore / 100,
         reasons: analysis.reasoning.split("\n"),
       });
     } catch (error: any) {

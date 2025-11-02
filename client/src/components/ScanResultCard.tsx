@@ -77,7 +77,7 @@ export function ScanResultCard({ finding, onDelete }: ScanResultCardProps) {
 
       <div className="mt-4 text-sm">
         <p>
-          <span className="opacity-70">Item price:</span> €{finding.price?.toFixed(2) || "N/A"}
+          <span className="opacity-70">Item price:</span> €{numericPrice ? numericPrice.toFixed(2) : "N/A"}
         </p>
         <p>
           <span className="opacity-70">Shipping:</span> €4.00
